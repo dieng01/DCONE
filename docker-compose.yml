@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: market-monitor-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    environment:
+      - MONGO_INITDB_DATABASE=restheart
+    restart: unless-stopped
+    networks:
+      - market-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RESTHeart - MQTT Broker + REST API + MongoDB Connector
+  restheart:
+    image: softinstigate/restheart:latest
+    container_name: market-monitor-restheart
+    ports:
+      - "8080:8080"   # REST API
+      - "1883:1883"   # MQTT TCP
+      - "8883:8883"   # MQTT WebSocket
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/restheart
+      - RESTHEART_OPTS=-o etc/mqtt.properties
+    volumes:
+      - ./restheart-config:/opt/restheart/etc/custom
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - market-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: market-monitor-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      restheart:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - market-network
+
+  # Optional: MQTT Data Publisher (simulated market data)
+  data-publisher:
+    build:
+      context: ./publisher
+      dockerfile: Dockerfile
+    container_name: market-monitor-publisher
+    environment:
+      - MQTT_BROKER=restheart
+      - MQTT_PORT=1883
+      - PUBLISH_INTERVAL=2000
+    depends_on:
+      restheart:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - market-network
+    profiles:
+      - publisher
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  market-network:
+    driver: bridge
