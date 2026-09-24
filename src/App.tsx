@@ -1,5 +1,7 @@
-export default function App() {
-  return (
-    <div/>
-  );
+import { Dashboard } from './components/Dashboard';
+
+function App() {
+  return <Dashboard />;
 }
+
+export default App;
