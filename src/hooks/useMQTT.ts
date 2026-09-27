@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { mqttService, StockData, CryptoData, DataCallback } from '../services/MQTTService';
 
 export interface HistoryPoint {
