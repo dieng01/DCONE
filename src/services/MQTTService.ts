@@ -1,5 +1,5 @@
 /**
- * MQTT Service - Kết nối MQTT Broker qua WebSocket
+ * MQTT Service - Kết nối MQTT Broker
  * 
  * Trong kiến trúc thực tế:
  * - RESTHeart đóng vai trò MQTT Broker tích hợp sẵn
@@ -15,10 +15,9 @@
  * - /market/crypto/eth
  * - /market/crypto/bnb
  * - /market/crypto/sol
- * 
- * Sử dụng native WebSocket (MQTT over WS) thay vì mqtt package
- * để tránh lỗi Node.js APIs trong browser.
  */
+
+import mqtt, { MqttClient } from 'mqtt';
 
 export interface StockData {
   symbol: string;
@@ -44,26 +43,70 @@ export interface CryptoData {
 export type DataCallback = (data: StockData | CryptoData) => void;
 
 class MQTTService {
+  private client: MqttClient | null = null;
   private connected: boolean = false;
   private callbacks: Map<string, DataCallback[]> = new Map();
-  private simulationInterval: ReturnType<typeof setInterval> | null = null;
-  private subscribedTopics: Set<string> = new Set();
+  private simulationInterval: NodeJS.Timeout | null = null;
+
+  // RESTHeart MQTT Broker configuration
+  private brokerUrl = 'wss://broker.hivemq.com:8884/mqtt'; // Public broker for demo
+  
+  // In production with RESTHeart:
+  // private brokerUrl = 'wss://your-restheart-server:8883/mqtt';
 
   connect(): Promise<void> {
-    return new Promise((resolve) => {
-      // In browser environment, we use simulation mode
-      // In production, connect to RESTHeart MQTT broker via WebSocket:
-      // const ws = new WebSocket('wss://your-restheart-server:8883/mqtt');
-      
-      console.log('[MQTT] Initializing connection...');
-      
-      // Simulate connection delay
-      setTimeout(() => {
-        this.connected = true;
-        console.log('[MQTT] Connected (simulation mode)');
+    return new Promise((resolve, reject) => {
+      try {
+        this.client = mqtt.connect(this.brokerUrl, {
+          clientId: `dashboard_${Math.random().toString(16).slice(2)}`,
+          clean: true,
+          connectTimeout: 4000,
+          reconnectPeriod: 5000,
+        });
+
+        this.client.on('connect', () => {
+          this.connected = true;
+          console.log('[MQTT] Connected to broker');
+          this.startSimulation();
+          resolve();
+        });
+
+        this.client.on('error', (err) => {
+          console.error('[MQTT] Connection error:', err);
+          // Fallback to simulation mode
+          this.startSimulation();
+          resolve();
+        });
+
+        this.client.on('message', (topic, message) => {
+          try {
+            const data = JSON.parse(message.toString());
+            const callbacks = this.callbacks.get(topic) || [];
+            callbacks.forEach(cb => cb(data));
+          } catch (e) {
+            console.error('[MQTT] Parse error:', e);
+          }
+        });
+
+        this.client.on('offline', () => {
+          this.connected = false;
+          console.log('[MQTT] Offline');
+        });
+
+        // Timeout - if not connected in 3s, use simulation
+        setTimeout(() => {
+          if (!this.connected) {
+            console.log('[MQTT] Using simulation mode (RESTHeart broker not available)');
+            this.startSimulation();
+            resolve();
+          }
+        }, 3000);
+
+      } catch (err) {
+        console.error('[MQTT] Failed to connect:', err);
         this.startSimulation();
         resolve();
-      }, 500);
+      }
     });
   }
 
@@ -72,8 +115,10 @@ class MQTTService {
       this.callbacks.set(topic, []);
     }
     this.callbacks.get(topic)!.push(callback);
-    this.subscribedTopics.add(topic);
-    console.log(`[MQTT] Subscribed to ${topic}`);
+
+    if (this.client && this.connected) {
+      this.client.subscribe(topic);
+    }
   }
 
   unsubscribe(topic: string, callback: DataCallback): void {
@@ -83,9 +128,8 @@ class MQTTService {
       callbacks.splice(index, 1);
     }
 
-    if (callbacks.length === 0) {
-      this.callbacks.delete(topic);
-      this.subscribedTopics.delete(topic);
+    if (this.client && this.connected && callbacks.length === 0) {
+      this.client.unsubscribe(topic);
     }
   }
 
@@ -108,8 +152,6 @@ class MQTTService {
     ];
 
     stocks.forEach(stock => {
-      if (!this.subscribedTopics.has(stock.topic)) return;
-      
       const change = (Math.random() - 0.48) * 5;
       const price = stock.basePrice + change + (Math.random() - 0.5) * 10;
       const data: StockData = {
@@ -137,8 +179,6 @@ class MQTTService {
     ];
 
     cryptos.forEach(crypto => {
-      if (!this.subscribedTopics.has(crypto.topic)) return;
-      
       const changePercent = (Math.random() - 0.47) * 3;
       const price = crypto.basePrice * (1 + changePercent / 100);
       const data: CryptoData = {
@@ -161,9 +201,11 @@ class MQTTService {
       clearInterval(this.simulationInterval);
       this.simulationInterval = null;
     }
+    if (this.client) {
+      this.client.end();
+      this.client = null;
+    }
     this.connected = false;
-    this.callbacks.clear();
-    this.subscribedTopics.clear();
   }
 
   isConnected(): boolean {
