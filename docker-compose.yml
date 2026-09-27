@@ -64,25 +64,6 @@ services:
     networks:
       - market-network
 
-  # Optional: MQTT Data Publisher (simulated market data)
-  data-publisher:
-    build:
-      context: ./publisher
-      dockerfile: Dockerfile
-    container_name: market-monitor-publisher
-    environment:
-      - MQTT_BROKER=restheart
-      - MQTT_PORT=1883
-      - PUBLISH_INTERVAL=2000
-    depends_on:
-      restheart:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - market-network
-    profiles:
-      - publisher
-
 volumes:
   mongodb_
     driver: local
