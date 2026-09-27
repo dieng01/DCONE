@@ -8,7 +8,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongodb_data:/data/db
+      - mongodb_/data/db
       - mongodb_config:/data/configdb
     environment:
       - MONGO_INITDB_DATABASE=restheart
@@ -26,9 +26,9 @@ services:
     image: softinstigate/restheart:latest
     container_name: market-monitor-restheart
     ports:
-      - "8080:8080"
-      - "1884:1883"
-      - "8884:8883"
+      - "8080:8080"   # REST API
+      - "1884:1883"   # MQTT TCP (đổi 1883 -> 1884 để tránh conflict)
+      - "8884:8883"   # MQTT WebSocket (đổi 8883 -> 8884 để tránh conflict)
     environment:
       - MONGO_URI=mongodb://mongodb:27017/restheart
       - RESTHEART_OPTS=-o etc/mqtt.properties
@@ -53,8 +53,8 @@ services:
       dockerfile: Dockerfile
     container_name: market-monitor-frontend
     ports:
-      - "3000:80"
-      - "3443:443"
+      - "3000:80"     # Đổi 80 -> 3000 để tránh conflict với IIS/Skype
+      - "3443:443"    # Đổi 443 -> 3443
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -65,7 +65,7 @@ services:
       - market-network
 
 volumes:
-  mongodb_data:
+  mongodb_
     driver: local
   mongodb_config:
     driver: local
