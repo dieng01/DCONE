@@ -1,14 +1,14 @@
 version: '3.8'
 
 services:
-  # MongoDB Database
+  # MongoDB Database - Lưu trữ dữ liệu market
   mongodb:
     image: mongo:7.0
     container_name: market-monitor-mongodb
     ports:
       - "27017:27017"
     volumes:
-      - mongodb_data:/data/db
+      - mongodb_/data/db
       - mongodb_config:/data/configdb
     environment:
       - MONGO_INITDB_DATABASE=restheart
@@ -26,9 +26,9 @@ services:
     image: softinstigate/restheart:latest
     container_name: market-monitor-restheart
     ports:
-      - "8080:8080"
-      - "1884:1883"
-      - "8884:8883"
+      - "8080:8080"   # REST API
+      - "1884:1883"   # MQTT TCP (host:container)
+      - "8884:8883"   # MQTT WebSocket (host:container)
     environment:
       - MONGO_URI=mongodb://mongodb:27017/restheart
       - RESTHEART_OPTS=-o etc/mqtt.properties
@@ -46,7 +46,24 @@ services:
       timeout: 5s
       retries: 3
 
-  # Frontend Dashboard
+  # MQTT Data Publisher - Publish market data to RESTHeart
+  publisher:
+    build:
+      context: ./publisher
+      dockerfile: Dockerfile
+    container_name: market-monitor-publisher
+    environment:
+      - MQTT_BROKER=restheart
+      - MQTT_PORT=1883
+      - PUBLISH_INTERVAL=2000
+    depends_on:
+      restheart:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - market-network
+
+  # Frontend Dashboard - Subscribe MQTT topics và hiển thị
   frontend:
     build:
       context: .
@@ -65,7 +82,7 @@ services:
       - market-network
 
 volumes:
-  mongodb_data:
+  mongodb_
     driver: local
   mongodb_config:
     driver: local
