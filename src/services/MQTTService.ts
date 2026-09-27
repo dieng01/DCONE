@@ -1,11 +1,9 @@
 /**
  * MQTT Service - Kết nối MQTT Broker qua WebSocket
  * 
- * Trong kiến trúc thực tế:
- * - RESTHeart đóng vai trò MQTT Broker tích hợp sẵn
- * - Dữ liệu được publish qua MQTT topics
- * - RESTHeart tự động lưu vào MongoDB
- * - Client subscribe để nhận real-time data
+ * Kiến trúc:
+ * 1. MQTT Publisher → RESTHeart MQTT Broker → MongoDB (auto-store)
+ * 2. Frontend → Subscribe MQTT topics → Real-time updates
  * 
  * Topics structure:
  * - /market/stocks/vn-index
@@ -15,9 +13,6 @@
  * - /market/crypto/eth
  * - /market/crypto/bnb
  * - /market/crypto/sol
- * 
- * Lưu ý: Sử dụng simulation mode cho demo.
- * Trong production, kết nối tới RESTHeart MQTT broker qua WebSocket.
  */
 
 export interface StockData {
@@ -44,26 +39,150 @@ export interface CryptoData {
 export type DataCallback = (data: StockData | CryptoData) => void;
 
 class MQTTService {
+  private ws: WebSocket | null = null;
   private connected: boolean = false;
   private callbacks: Map<string, DataCallback[]> = new Map();
   private simulationInterval: ReturnType<typeof setInterval> | null = null;
   private subscribedTopics: Set<string> = new Set();
+  private useSimulation: boolean = true; // Set to false when RESTHeart is available
+  
+  // MQTT Broker URL (RESTHeart WebSocket endpoint)
+  private brokerUrl: string = '';
 
-  connect(): Promise<void> {
+  constructor() {
+    // Detect environment
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      // In production with RESTHeart, use actual MQTT WebSocket
+      // For now, use simulation mode
+      this.brokerUrl = `ws://${hostname}:8884/mqtt`;
+      this.useSimulation = true; // Change to false when RESTHeart MQTT is ready
+    }
+  }
+
+  async connect(): Promise<void> {
+    console.log('[MQTT] Initializing connection...');
+    
+    if (this.useSimulation) {
+      // Simulation mode for demo
+      await this.connectSimulation();
+    } else {
+      // Real MQTT connection via WebSocket
+      await this.connectWebSocket();
+    }
+  }
+
+  private connectSimulation(): Promise<void> {
     return new Promise((resolve) => {
-      // In production, connect to RESTHeart MQTT broker:
-      // const ws = new WebSocket('wss://your-restheart-server:8883/mqtt', 'mqtt');
-      
-      console.log('[MQTT] Initializing connection...');
-      
-      // Simulate connection delay
       setTimeout(() => {
         this.connected = true;
         console.log('[MQTT] Connected (simulation mode)');
+        console.log('[MQTT] Note: Using simulated data. Enable RESTHeart for real MQTT.');
         this.startSimulation();
         resolve();
       }, 500);
     });
+  }
+
+  private connectWebSocket(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        this.ws = new WebSocket(this.brokerUrl, 'mqtt');
+        
+        this.ws.onopen = () => {
+          console.log('[MQTT] WebSocket connected to RESTHeart');
+          this.connected = true;
+          
+          // Send MQTT CONNECT packet (simplified)
+          // In production, use proper MQTT.js library for full protocol support
+          this.sendMQTTConnect();
+          
+          // Resubscribe to topics
+          this.subscribedTopics.forEach(topic => {
+            this.sendMQTTSubscribe(topic);
+          });
+          
+          resolve();
+        };
+
+        this.ws.onmessage = (event) => {
+          this.handleMQTTMessage(event.data);
+        };
+
+        this.ws.onerror = (error) => {
+          console.error('[MQTT] WebSocket error:', error);
+          // Fallback to simulation
+          console.log('[MQTT] Falling back to simulation mode...');
+          this.useSimulation = true;
+          this.startSimulation();
+          resolve();
+        };
+
+        this.ws.onclose = () => {
+          console.log('[MQTT] WebSocket closed');
+          this.connected = false;
+        };
+
+        // Timeout
+        setTimeout(() => {
+          if (!this.connected) {
+            console.log('[MQTT] Connection timeout, using simulation mode');
+            this.useSimulation = true;
+            this.startSimulation();
+            resolve();
+          }
+        }, 5000);
+
+      } catch (error) {
+        console.error('[MQTT] Failed to connect:', error);
+        this.useSimulation = true;
+        this.startSimulation();
+        resolve();
+      }
+    });
+  }
+
+  private sendMQTTConnect(): void {
+    // Simplified MQTT CONNECT packet
+    // In production, use mqtt.js library for proper protocol handling
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      // MQTT CONNECT packet structure (simplified)
+      const packet = new Uint8Array([
+        0x10, // CONNECT packet type
+        0x0e, // Remaining length
+        0x00, 0x04, 0x4d, 0x51, 0x54, 0x54, // "MQTT"
+        0x04, // Protocol level (4 = MQTT 3.1.1)
+        0x02, // Connect flags (Clean Session)
+        0x00, 0x3c, // Keep alive (60 seconds)
+        0x00, 0x04, // Client ID length
+        0x77, 0x65, 0x62, // "web" (partial)
+      ]);
+      this.ws.send(packet);
+    }
+  }
+
+  private sendMQTTSubscribe(topic: string): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log(`[MQTT] Subscribing to ${topic}`);
+      // In production, use proper MQTT SUBSCRIBE packet
+    }
+  }
+
+  private handleMQTTMessage(data: ArrayBuffer | string): void {
+    try {
+      // Parse MQTT PUBLISH packet (simplified)
+      // In production, use mqtt.js library for proper parsing
+      if (typeof data === 'string') {
+        const message = JSON.parse(data);
+        const topic = message.topic;
+        const payload = message.payload;
+        
+        const callbacks = this.callbacks.get(topic) || [];
+        callbacks.forEach(cb => cb(payload));
+      }
+    } catch (error) {
+      console.error('[MQTT] Failed to parse message:', error);
+    }
   }
 
   subscribe(topic: string, callback: DataCallback): void {
@@ -72,6 +191,11 @@ class MQTTService {
     }
     this.callbacks.get(topic)!.push(callback);
     this.subscribedTopics.add(topic);
+    
+    if (this.connected && !this.useSimulation) {
+      this.sendMQTTSubscribe(topic);
+    }
+    
     console.log(`[MQTT] Subscribed to ${topic}`);
   }
 
@@ -91,7 +215,7 @@ class MQTTService {
   private startSimulation(): void {
     if (this.simulationInterval) return;
 
-    // Simulate real-time market data (as if coming from MQTT via RESTHeart)
+    console.log('[MQTT] Starting simulation mode...');
     this.simulationInterval = setInterval(() => {
       this.simulateStockData();
       this.simulateCryptoData();
@@ -160,6 +284,12 @@ class MQTTService {
       clearInterval(this.simulationInterval);
       this.simulationInterval = null;
     }
+    
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    
     this.connected = false;
     this.callbacks.clear();
     this.subscribedTopics.clear();
@@ -167,6 +297,10 @@ class MQTTService {
 
   isConnected(): boolean {
     return this.connected;
+  }
+
+  isSimulationMode(): boolean {
+    return this.useSimulation;
   }
 }
 

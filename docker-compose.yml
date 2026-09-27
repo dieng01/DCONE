@@ -1,5 +1,5 @@
 services:
-  # MongoDB Database
+  # MongoDB Database - Lưu trữ dữ liệu market
   mongodb:
     image: mongo:7.0
     container_name: market-monitor-mongodb
@@ -39,17 +39,16 @@ services:
     networks:
       - market-network
 
-  # Frontend Dashboard
-  frontend:
+  # MQTT Data Publisher - Publish market data to RESTHeart
+  publisher:
     build:
-      context: .
+      context: ./publisher
       dockerfile: Dockerfile
-    container_name: market-monitor-frontend
-    ports:
-      - "3000:80"     # Đổi 80 -> 3000 để tránh conflict với IIS/Skype
-      - "3443:443"    # Đổi 443 -> 3443
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    container_name: market-monitor-publisher
+    environment:
+      - MQTT_BROKER=restheart
+      - MQTT_PORT=1883
+      - PUBLISH_INTERVAL=2000
     depends_on:
       restheart:
         condition: service_started
