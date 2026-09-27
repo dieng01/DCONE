@@ -12,7 +12,7 @@ bind: An attempt was made to access a socket in a way forbidden by its access pe
 ### 1. Đổi port trong docker-compose.yml
 
 **Port cũ → Port mới:**
-- MQTT TCP: `1883` → `1884`
+- MQTT TCP: `1883` → `11884`
 - MQTT WebSocket: `8883` → `8884`
 - Frontend: `80` → `3000`
 - REST API: `8080` (giữ nguyên)
@@ -54,7 +54,7 @@ docker-compose ps
 |---------|-----|
 | **Frontend Dashboard** | http://localhost:3000 |
 | REST API | http://localhost:8080 |
-| MQTT TCP | localhost:1884 |
+| MQTT TCP | localhost:11884 |
 | MQTT WebSocket | ws://localhost:8884/mqtt |
 | MongoDB | localhost:27017 |
 
@@ -64,7 +64,7 @@ docker-compose ps
 
 ```powershell
 # Kiểm tra port nào đang dùng
-netstat -ano | findstr :1884
+netstat -ano | findstr :11884
 netstat -ano | findstr :8884
 netstat -ano | findstr :3000
 

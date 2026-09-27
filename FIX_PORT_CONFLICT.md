@@ -23,13 +23,13 @@ File `docker-compose.yml` đã được cập nhật:
 
 ```yaml
 ports:
-  - "1884:1883"   # Host:1884 -> Container:1883
+  - "11884:1883"  # Host:11884 -> Container:1883
   - "8884:8883"   # Host:8884 -> Container:8883
   - "3000:80"     # Host:3000 -> Container:80
 ```
 
 **Port mapping mới:**
-- MQTT TCP: `1884` (thay vì `1883`)
+- MQTT TCP: `11884` (thay vì `1883`)
 - MQTT WebSocket: `8884` (thay vì `8883`)
 - Frontend: `3000` (thay vì `80`)
 - REST API: `8080` (giữ nguyên)
@@ -118,7 +118,7 @@ Với port mapping mới:
 |---------|-----|
 | Frontend Dashboard | http://localhost:3000 |
 | REST API | http://localhost:8080 |
-| MQTT TCP | localhost:1884 |
+| MQTT TCP | localhost:11884 |
 | MQTT WebSocket | ws://localhost:8884/mqtt |
 | MongoDB | localhost:27017 |
 
@@ -187,7 +187,7 @@ docker-compose up -d
 
 | Service | Port cũ | Port mới | Lý do |
 |---------|---------|----------|-------|
-| MQTT TCP | 1883 | 1884 | Tránh Windows reserved ports |
+| MQTT TCP | 1883 | 11884 | Tránh Windows reserved ports |
 | MQTT WS | 8883 | 8884 | Tránh Windows reserved ports |
 | Frontend | 80 | 3000 | Tránh conflict với IIS/Skype |
 | REST API | 8080 | 8080 | Giữ nguyên |
